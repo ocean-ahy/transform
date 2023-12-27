@@ -359,6 +359,52 @@ namespace tf3d
     }
 
     /**
+     * @函数功能:
+     * @参数:
+     * @param {Matrix3d} R
+     * @返回值:  axis 轴角， 默认为度
+     * @版本: V1.0
+     * @作者: AHY
+     * @日期:
+     */
+    inline Eigen::Vector3d Mat2AxisAngle(Eigen::Matrix3d R)
+    {
+        /* 
+        该段代码公式，对于某些情况R 计算有误，改为eigen自带公式， 如 
+        R << 0,1,0,
+            1,0,0,
+            0,0,-1;
+
+        double ang = acos((R.trace() - 1.0) / 2);
+        double k = 1.0 / (2 * sin(ang));
+        Eigen::Vector3d axis;
+        axis[0] = k * (R(2, 1) - R(1, 2));
+        axis[1] = k * (R(0, 2) - R(2, 0));
+        axis[2] = k * (R(1, 0) - R(0, 1));
+        ang *= TO_DEGREE; // 转为°
+        axis *= ang;
+        */
+
+
+        Eigen::Vector3d axis;
+        Eigen::AngleAxisd V(R); // R 转为 四元数Q 转为 轴角axis
+        axis = V.axis() * V.angle() * TO_DEGREE;
+        return axis;
+    }
+    /**
+     * @函数功能: 旋转矩阵- 轴角
+     */
+    inline bool Mat2AxisAngle(Eigen::Matrix3d R, Eigen::Vector3d &axis)
+    {
+        if (!isRotatedMatrix(R))
+            return false;
+
+        Eigen::AngleAxisd V(R); // R 转为 四元数Q 转为 轴角axis
+        axis = V.axis() * V.angle() * TO_DEGREE;
+        return true;
+    }
+
+    /**
      * @函数功能: 旋转矩阵- 轴角
      * @参数:
      * @param {Matrix3d} R  入参 矩阵
@@ -374,66 +420,13 @@ namespace tf3d
         if (!isRotatedMatrix(R))
             return false;
 
-        ang = acos((R.trace() - 1.0) / 2);
-        double k = 1.0 / (2 * sin(ang));
-        axis[0] = k * (R(2, 1) - R(1, 2));
-        axis[1] = k * (R(0, 2) - R(2, 0));
-        axis[2] = k * (R(1, 0) - R(0, 1));
+        Eigen::AngleAxisd V(R); 
+        ang = V.angle() * TO_DEGREE;
+        axis = V.axis();
 
-        ang *= TO_DEGREE; // 转为°
         return true;
     }
 
-    /**
-     * @函数功能: 旋转矩阵- 轴角
-     * @参数:
-     * @param {Matrix3d} R
-     * @param {Vector3d} &axis  轴角，模长为角度，单位度
-     * @返回值:
-     * @版本: V1.0
-     * @作者: AHY
-     * @日期:
-     */
-    inline bool Mat2AxisAngle(Eigen::Matrix3d R, Eigen::Vector3d &axis)
-    {
-        if (!isRotatedMatrix(R))
-            return false;
-
-        double ang = acos((R.trace() - 1.0) / 2);
-        double k = 1.0 / (2 * sin(ang));
-        axis[0] = k * (R(2, 1) - R(1, 2));
-        axis[1] = k * (R(0, 2) - R(2, 0));
-        axis[2] = k * (R(1, 0) - R(0, 1));
-
-        ang *= TO_DEGREE; // 转为°
-        axis *= ang;
-        return true;
-    }
-
-    /**
-     * @函数功能:
-     * @参数:
-     * @param {Matrix3d} R
-     * @返回值:  axis 轴角， 默认为度
-     * @版本: V1.0
-     * @作者: AHY
-     * @日期:
-     */
-    inline Eigen::Vector3d Mat2AxisAngle(Eigen::Matrix3d R)
-    {
-        double ang = acos((R.trace() - 1.0) / 2);
-        double k = 1.0 / (2 * sin(ang));
-        Eigen::Vector3d axis;
-        axis[0] = k * (R(2, 1) - R(1, 2));
-        axis[1] = k * (R(0, 2) - R(2, 0));
-        axis[2] = k * (R(1, 0) - R(0, 1));
-        ang *= TO_DEGREE; // 转为°
-        axis *= ang;
-
-        // Eigen::AngleAxisd V(R);
-        // axis = V.axis() * V.angle() * TO_DEGREE;
-        return axis;
-    }
 
     /**
      * @函数功能: 旋转 、平移  合成 4x4齐次矩阵Homogeneous
@@ -759,14 +752,53 @@ namespace tf3d
     }
 
     /*-------------------------------四元数------------------------------------*/
-    inline Eigen::Matrix3d Quat2Mat(Eigen::Quaterniond q) { return q.matrix(); }
-    inline Eigen::Vector3d Quat2Eular(Eigen::Quaterniond q) { return Mat2Euler(q.matrix()); }
-    inline Eigen::Vector3d Quat2Axis(Eigen::Quaterniond q) { return Mat2AxisAngle(q.matrix()); }
+    inline Eigen::Matrix3d Quat2Mat(const Eigen::Quaterniond &q)
+    {
+        return q.toRotationMatrix();
+    }
+    inline Eigen::Vector3d Quat2Eular(const Eigen::Quaterniond &q)
+    {
+        return Mat2Euler(q.toRotationMatrix());
+    }
 
-    inline Eigen::Quaterniond Eular2Quat(Eigen::Vector3d rpy) { return Eigen::Quaterniond(Euler2Mat(rpy)); }
-    inline Eigen::Quaterniond AxisAngle2Quat(Eigen::Vector3d axis) { return Eigen::Quaterniond(AxisAngle2Mat(axis)); }
-    inline Eigen::Quaterniond Mat2Quat(Eigen::Matrix3d mat) { return Eigen::Quaterniond(mat); }
+    /**
+     * @函数功能:  四元数  转为 旋转矢量/轴角
+     * @参数:
+     * @param {Quaterniond} q
+     * @返回值:
+     * @版本: V1.0
+     * @作者: AHY
+     * @日期:
+     * 基本公式:   [t, v] = [cos(t/2) , sin(t / 2)*[x, y, z] ]
+     */
+    inline Eigen::Vector3d Quat2AxisAngle(const Eigen::Quaterniond &q)
+    {
 
+        Eigen::Quaterniond tmp_q = q.normalized();
+        Eigen::Vector3d axis;
+        double t = 2 * acos(tmp_q.w());
+        axis << tmp_q.x(), tmp_q.y(), tmp_q.z();
+        axis = axis / sin(t / 2) * t;
+        axis *= TO_DEGREE; // 转为角度
+
+        return axis;
+    }
+
+    // 基本公式:   [t, v] = [cos(t/2) , sin(t / 2)*[x, y, z] ]
+    inline Eigen::Quaterniond AxisAngle2Quat(const Eigen::Vector3d &axis, AngType flag = DEGREE)
+    {
+        Eigen::Quaterniond q;
+        double t = axis.norm();
+        Eigen::Vector3d vec = axis.normalized();
+
+        t = (flag == DEGREE) ? deg2rad(t) : t;
+        q.w() = cos(t / 2);
+        q.x() = sin(t / 2) * vec.x();
+        q.y() = sin(t / 2) * vec.y();
+        q.z() = sin(t / 2) * vec.z();
+
+        return q;
+    }
     /**
      * @函数功能: 轴角转四元数
      * @参数:
@@ -792,6 +824,12 @@ namespace tf3d
         return q;
     }
 
+    inline Eigen::Quaterniond Eular2Quat(Eigen::Vector3d rpy) { return Eigen::Quaterniond(Euler2Mat(rpy)); }
+
+    inline Eigen::Quaterniond Mat2Quat(const Eigen::Matrix3d &mat) { return Eigen::Quaterniond(mat); }
+
+    
+
     inline void printQuaternion(const Eigen::Quaterniond &q, const std::string &info)
     {
         std::cout << info << " x y z w: " << q.x() << ", " << q.y() << ", " << q.z() << ", " << q.w() << std::endl; // 两种元素访问方式均可
@@ -807,7 +845,18 @@ namespace tf3d
     {
         // std::cout << "quaternion: " << q[0] << ", " << q[1] << ", " << q[2] << ", " << q[3] << std::endl;  // x,y,z,w
         std::cout << info << "  axis: " << x.axis().transpose() << "  "
-                  << " ang:" << (x.angle()) << std::endl; // 两种元素访问方式均可
+                  << " ang:" << (x.angle()) << std::endl; 
+    }
+
+    inline void printAngleAxisd(const Eigen::Vector3d &x, const std::string &info)
+    {
+        Eigen::AngleAxisd tmp;
+
+        tmp.angle() = x.norm();
+        tmp.axis() = x.normalized();
+
+        std::cout << info << "  axis: " << tmp.axis().transpose() << "  "
+                  << " ang:" << (tmp.angle()) << std::endl;
     }
 
     template <typename T>
@@ -822,7 +871,7 @@ namespace tf3d
     {
         // cout.precision(6);
         // cout.setf(ios::showpoint);
-        std::cout << info << "[ ";
+        std::cout << info << " [ ";
 
         for (int i = 0; i < v.size(); i++)
         {
