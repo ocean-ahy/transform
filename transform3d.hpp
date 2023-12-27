@@ -426,6 +426,132 @@ namespace tf3d
         return true;
     }
 
+
+    /*------------------------------------------------------------------------*/
+    /*-------------------------------四元数------------------------------------*/
+    /*------------------------------------------------------------------------*/
+    inline Eigen::Matrix3d Quat2Mat(const Eigen::Quaterniond &q)
+    {
+        return q.toRotationMatrix();
+    }
+    inline Eigen::Vector3d Quat2euler(const Eigen::Quaterniond &q)
+    {
+        return Mat2Euler(q.toRotationMatrix());
+    }
+
+    /**
+     * @函数功能:  四元数  转为 旋转矢量/轴角
+     * @参数:
+     * @param {Quaterniond} q
+     * @返回值:
+     * @版本: V1.0
+     * @作者: AHY
+     * @日期:
+     * 基本公式:   [t, v] = [cos(t/2) , sin(t / 2)*[x, y, z] ]
+     */
+    inline Eigen::Vector3d Quat2AxisAngle(const Eigen::Quaterniond &q)
+    {
+
+        Eigen::Quaterniond tmp_q = q.normalized();
+        Eigen::Vector3d axis;
+        double t = 2 * acos(tmp_q.w());
+        axis << tmp_q.x(), tmp_q.y(), tmp_q.z();
+        axis = axis / sin(t / 2) * t;
+        axis *= TO_DEGREE; // 转为角度
+
+        return axis;
+    }
+
+    // 基本公式:   [t, v] = [cos(t/2) , sin(t / 2)*[x, y, z] ]
+    inline Eigen::Quaterniond AxisAngle2Quat(const Eigen::Vector3d &axis, AngType flag = DEGREE)
+    {
+        Eigen::Quaterniond q;
+        double t = axis.norm();
+        Eigen::Vector3d vec = axis.normalized();
+
+        t = (flag == DEGREE) ? deg2rad(t) : t;
+        q.w() = cos(t / 2);
+        q.x() = sin(t / 2) * vec.x();
+        q.y() = sin(t / 2) * vec.y();
+        q.z() = sin(t / 2) * vec.z();
+
+        return q;
+    }
+    /**
+     * @函数功能: 轴角转四元数
+     * @参数:
+     * @param {Vector3d} axis
+     * @param {double} ang
+     * @param {AngType} flag
+     * @返回值:
+     * @版本: V1.0
+     * @作者: AHY
+     * @日期:
+     */
+    inline Eigen::Quaterniond AxisAngle2Quat(Eigen::Vector3d axis, double ang, AngType flag = DEGREE)
+    {
+        if (flag == DEGREE)
+            ang *= TO_RADIAN;
+
+        axis = axis.normalized();
+        Eigen::Quaterniond q;
+        q.w() = cos(ang / 2);
+        q.x() = axis.x() * sin(ang / 2);
+        q.y() = axis.y() * sin(ang / 2);
+        q.z() = axis.z() * sin(ang / 2);
+        return q;
+    }
+
+    inline Eigen::Quaterniond Euler2Quat(const Eigen::Vector3d &rpy, AngType flag = DEGREE)
+    {
+        Eigen::Vector3d tmp;
+        tmp = (flag == DEGREE) ? rpy * TO_RADIAN : rpy;
+
+        Eigen::Quaterniond qz(cos(0.5 * tmp.z()), 0, 0, sin(0.5 * tmp.z()));
+        Eigen::Quaterniond qy(cos(0.5 * tmp.y()), 0, sin(0.5 * tmp.y()), 0);
+        Eigen::Quaterniond qx(cos(0.5 * tmp.x()), sin(0.5 * tmp.x()), 0, 0);
+        Eigen::Quaterniond res = qz * qy * qx;
+
+        // ---------------
+        // double x = tmp.x() / 2;
+        // double y = tmp.y() / 2;
+        // double z = tmp.z() / 2;
+        // res.w() = cos(x)*cos(y)*cos(z) + sin(x)*sin(y)*sin(z);
+        // res.x() = sin(x)*cos(y)*cos(z) - cos(x)*sin(y)*sin(z);
+        // res.y() = cos(x)*sin(y)*cos(z) + sin(x)*cos(y)*sin(z);
+        // res.z() = cos(x)*cos(y)*sin(z) - sin(x)*sin(y)*cos(z);
+        
+        //------------------
+        // res = Euler2Mat(rpy, flag);
+
+        return res;
+    }
+
+    inline Eigen::Quaterniond Mat2Quat(const Eigen::Matrix3d &mat) { return Eigen::Quaterniond(mat); }
+
+    /**
+     * @函数功能:  欧拉角  转为 轴角
+     * @参数:
+     * @param {Vector3d} euler 欧拉角 rx ry rz， 默认顺序zyx
+     * @param {AngType} flag 角度类型。 输出类型与输入一致
+     * @返回值:
+     * @版本: V1.0
+     * @作者: AHY
+     * @日期:
+     */
+    inline Eigen::Vector3d Euler2AxisAngle(Eigen::Vector3d euler, AngType flag = DEGREE)
+    {
+        Eigen::Quaterniond q = Euler2Quat(euler, flag);
+        Eigen::Vector3d axis = Quat2AxisAngle(q);
+
+        return ((flag == RADIAN) ? axis * TO_RADIAN : axis);
+    }
+
+
+    /*------------------------------------------------------------------------*/
+    /*------------------------  齐次矩阵    homo ------------------------------*/
+    /*------------------------------------------------------------------------*/
+
     /**
      * @函数功能: 旋转 、平移  合成 4x4齐次矩阵Homogeneous
      * @参数:
@@ -725,6 +851,34 @@ namespace tf3d
     }
 
     /**
+     * @函数功能: 4x4齐次矩阵 转为 四元数 x y z  qw qx qy qz
+     * @参数:
+     * @param {Matrix4d} H
+     * @返回值:
+     * @版本: V1.0
+     * @作者: AHY
+     * @日期:
+     */
+    inline Eigen::VectorXd H2PoseQuat(Eigen::Matrix4d H)
+    {
+        Eigen::VectorXd pose = Eigen::VectorXd(7);
+        Eigen::Vector3d p = GetPosFromHomo(H);
+        pose(0, 0) = p.x();
+        pose(1, 0) = p.y();
+        pose(2, 0) = p.z();
+
+        Eigen::Quaterniond q = Mat2Quat(GetRotFromHomo(H));
+
+        pose(3, 0) = q.w();
+        pose(4, 0) = q.x();
+        pose(5, 0) = q.y();
+        pose(6, 0) = q.z();
+
+        return pose;
+    }
+
+
+    /**
      * @函数功能:  欧拉角  转为 旋转矢量/轴角
      * @参数:
      * @param {Vector3d} euler 欧拉角 rx ry rz， 默认顺序zyx
@@ -749,123 +903,6 @@ namespace tf3d
         return ((flag == RADIAN) ? euler * TO_RADIAN : euler);
     }
 
-    /*-------------------------------四元数------------------------------------*/
-    inline Eigen::Matrix3d Quat2Mat(const Eigen::Quaterniond &q)
-    {
-        return q.toRotationMatrix();
-    }
-    inline Eigen::Vector3d Quat2euler(const Eigen::Quaterniond &q)
-    {
-        return Mat2Euler(q.toRotationMatrix());
-    }
-
-    /**
-     * @函数功能:  四元数  转为 旋转矢量/轴角
-     * @参数:
-     * @param {Quaterniond} q
-     * @返回值:
-     * @版本: V1.0
-     * @作者: AHY
-     * @日期:
-     * 基本公式:   [t, v] = [cos(t/2) , sin(t / 2)*[x, y, z] ]
-     */
-    inline Eigen::Vector3d Quat2AxisAngle(const Eigen::Quaterniond &q)
-    {
-
-        Eigen::Quaterniond tmp_q = q.normalized();
-        Eigen::Vector3d axis;
-        double t = 2 * acos(tmp_q.w());
-        axis << tmp_q.x(), tmp_q.y(), tmp_q.z();
-        axis = axis / sin(t / 2) * t;
-        axis *= TO_DEGREE; // 转为角度
-
-        return axis;
-    }
-
-    // 基本公式:   [t, v] = [cos(t/2) , sin(t / 2)*[x, y, z] ]
-    inline Eigen::Quaterniond AxisAngle2Quat(const Eigen::Vector3d &axis, AngType flag = DEGREE)
-    {
-        Eigen::Quaterniond q;
-        double t = axis.norm();
-        Eigen::Vector3d vec = axis.normalized();
-
-        t = (flag == DEGREE) ? deg2rad(t) : t;
-        q.w() = cos(t / 2);
-        q.x() = sin(t / 2) * vec.x();
-        q.y() = sin(t / 2) * vec.y();
-        q.z() = sin(t / 2) * vec.z();
-
-        return q;
-    }
-    /**
-     * @函数功能: 轴角转四元数
-     * @参数:
-     * @param {Vector3d} axis
-     * @param {double} ang
-     * @param {AngType} flag
-     * @返回值:
-     * @版本: V1.0
-     * @作者: AHY
-     * @日期:
-     */
-    inline Eigen::Quaterniond AxisAngle2Quat(Eigen::Vector3d axis, double ang, AngType flag = DEGREE)
-    {
-        if (flag == DEGREE)
-            ang *= TO_RADIAN;
-
-        axis = axis.normalized();
-        Eigen::Quaterniond q;
-        q.w() = cos(ang / 2);
-        q.x() = axis.x() * sin(ang / 2);
-        q.y() = axis.y() * sin(ang / 2);
-        q.z() = axis.z() * sin(ang / 2);
-        return q;
-    }
-
-    inline Eigen::Quaterniond Euler2Quat(const Eigen::Vector3d &rpy, AngType flag = DEGREE)
-    {
-        Eigen::Vector3d tmp;
-        tmp = (flag == DEGREE) ? rpy * TO_RADIAN : rpy;
-
-        Eigen::Quaterniond qz(cos(0.5 * tmp.z()), 0, 0, sin(0.5 * tmp.z()));
-        Eigen::Quaterniond qy(cos(0.5 * tmp.y()), 0, sin(0.5 * tmp.y()), 0);
-        Eigen::Quaterniond qx(cos(0.5 * tmp.x()), sin(0.5 * tmp.x()), 0, 0);
-        Eigen::Quaterniond res = qz * qy * qx;
-
-        // ---------------
-        // double x = tmp.x() / 2;
-        // double y = tmp.y() / 2;
-        // double z = tmp.z() / 2;
-        // res.w() = cos(x)*cos(y)*cos(z) + sin(x)*sin(y)*sin(z);
-        // res.x() = sin(x)*cos(y)*cos(z) - cos(x)*sin(y)*sin(z);
-        // res.y() = cos(x)*sin(y)*cos(z) + sin(x)*cos(y)*sin(z);
-        // res.z() = cos(x)*cos(y)*sin(z) - sin(x)*sin(y)*cos(z);
-        
-        //------------------
-        // res = Euler2Mat(rpy, flag);
-
-        return res;
-    }
-
-    inline Eigen::Quaterniond Mat2Quat(const Eigen::Matrix3d &mat) { return Eigen::Quaterniond(mat); }
-
-    /**
-     * @函数功能:  欧拉角  转为 轴角
-     * @参数:
-     * @param {Vector3d} euler 欧拉角 rx ry rz， 默认顺序zyx
-     * @param {AngType} flag 角度类型。 输出类型与输入一致
-     * @返回值:
-     * @版本: V1.0
-     * @作者: AHY
-     * @日期:
-     */
-    inline Eigen::Vector3d Euler2AxisAngle(Eigen::Vector3d euler, AngType flag = DEGREE)
-    {
-        Eigen::Quaterniond q = Euler2Quat(euler, flag);
-        Eigen::Vector3d axis = Quat2AxisAngle(q);
-
-        return ((flag == RADIAN) ? axis * TO_RADIAN : axis);
-    }
 
     inline void printQuaternion(const Eigen::Quaterniond &q, const std::string &info)
     {
