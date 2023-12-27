@@ -832,6 +832,16 @@ namespace tf3d
         Eigen::Quaterniond qx(cos(0.5 * tmp.x()), sin(0.5 * tmp.x()), 0, 0);
         Eigen::Quaterniond res = qz * qy * qx;
 
+        // ---------------
+        // double x = tmp.x() / 2;
+        // double y = tmp.y() / 2;
+        // double z = tmp.z() / 2;
+        // res.w() = cos(x)*cos(y)*cos(z) + sin(x)*sin(y)*sin(z);
+        // res.x() = sin(x)*cos(y)*cos(z) - cos(x)*sin(y)*sin(z);
+        // res.y() = cos(x)*sin(y)*cos(z) + sin(x)*cos(y)*sin(z);
+        // res.z() = cos(x)*cos(y)*sin(z) - sin(x)*sin(y)*cos(z);
+        
+        //------------------
         // res = Euler2Mat(rpy, flag);
 
         return res;
