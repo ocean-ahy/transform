@@ -145,19 +145,19 @@ namespace tf3d
     /**
      * @函数功能:欧拉 转 旋转矩阵 z-y-x
      * @参数:
-     * @param {Vector3d} eularAngle
+     * @param {Vector3d} eulerAngle
      * @param {AngType} flag
      * @返回值:
      * @版本: V1.0
      * @作者: AHY
      * @日期:
      */
-    inline Eigen::Matrix3d Euler2Mat(Eigen::Vector3d eularAngle, AngType flag = DEGREE)
+    inline Eigen::Matrix3d Euler2Mat(Eigen::Vector3d eulerAngle, AngType flag = DEGREE)
     {
         double rx, ry, rz;
-        rx = (flag == DEGREE) ? eularAngle.x() : rad2deg(eularAngle.x());
-        ry = (flag == DEGREE) ? eularAngle.y() : rad2deg(eularAngle.y());
-        rz = (flag == DEGREE) ? eularAngle.z() : rad2deg(eularAngle.z());
+        rx = (flag == DEGREE) ? eulerAngle.x() : rad2deg(eulerAngle.x());
+        ry = (flag == DEGREE) ? eulerAngle.y() : rad2deg(eulerAngle.y());
+        rz = (flag == DEGREE) ? eulerAngle.z() : rad2deg(eulerAngle.z());
         Eigen::Matrix3d rotation_matrix = RotZ(rz) * RotY(ry) * RotX(rx);
         return rotation_matrix;
     }
@@ -369,8 +369,8 @@ namespace tf3d
      */
     inline Eigen::Vector3d Mat2AxisAngle(Eigen::Matrix3d R)
     {
-        /* 
-        该段代码公式，对于某些情况R 计算有误，改为eigen自带公式， 如 
+        /*
+        该段代码公式，对于某些情况R 计算有误，改为eigen自带公式， 如
         R << 0,1,0,
             1,0,0,
             0,0,-1;
@@ -384,7 +384,6 @@ namespace tf3d
         ang *= TO_DEGREE; // 转为°
         axis *= ang;
         */
-
 
         Eigen::Vector3d axis;
         Eigen::AngleAxisd V(R); // R 转为 四元数Q 转为 轴角axis
@@ -420,13 +419,12 @@ namespace tf3d
         if (!isRotatedMatrix(R))
             return false;
 
-        Eigen::AngleAxisd V(R); 
+        Eigen::AngleAxisd V(R);
         ang = V.angle() * TO_DEGREE;
         axis = V.axis();
 
         return true;
     }
-
 
     /**
      * @函数功能: 旋转 、平移  合成 4x4齐次矩阵Homogeneous
@@ -513,8 +511,8 @@ namespace tf3d
     inline Eigen::Matrix4d PoseRPY2H(double pose[6], AngType flag = DEGREE)
     {
         Eigen::Vector3d p(pose[0], pose[1], pose[2]);
-        Eigen::Vector3d eular(pose[3], pose[4], pose[5]);
-        return ComposeH(Euler2Mat(eular, flag), p);
+        Eigen::Vector3d euler(pose[3], pose[4], pose[5]);
+        return ComposeH(Euler2Mat(euler, flag), p);
     }
 
     inline Eigen::Matrix4d PoseRPY2H(Eigen::VectorXd pose, AngType flag = DEGREE)
@@ -522,8 +520,8 @@ namespace tf3d
         if (pose.size() == 6)
         {
             Eigen::Vector3d p(pose(0), pose(1), pose(2));
-            Eigen::Vector3d eular(pose(3), pose(4), pose(5));
-            return ComposeH(Euler2Mat(eular, flag), p);
+            Eigen::Vector3d euler(pose(3), pose(4), pose(5));
+            return ComposeH(Euler2Mat(euler, flag), p);
         }
 
         return Eigen::Matrix4d::Zero();
@@ -538,8 +536,8 @@ namespace tf3d
                                      AngType flag = DEGREE)
     {
         Eigen::Vector3d p(x, y, z);
-        Eigen::Vector3d eular(rx, ry, rz);
-        return ComposeH(Euler2Mat(eular, flag), p);
+        Eigen::Vector3d euler(rx, ry, rz);
+        return ComposeH(Euler2Mat(euler, flag), p);
     }
 
     /**
@@ -756,7 +754,7 @@ namespace tf3d
     {
         return q.toRotationMatrix();
     }
-    inline Eigen::Vector3d Quat2Eular(const Eigen::Quaterniond &q)
+    inline Eigen::Vector3d Quat2euler(const Eigen::Quaterniond &q)
     {
         return Mat2Euler(q.toRotationMatrix());
     }
@@ -824,11 +822,40 @@ namespace tf3d
         return q;
     }
 
-    inline Eigen::Quaterniond Eular2Quat(Eigen::Vector3d rpy) { return Eigen::Quaterniond(Euler2Mat(rpy)); }
+    inline Eigen::Quaterniond Euler2Quat(const Eigen::Vector3d &rpy, AngType flag = DEGREE)
+    {
+        Eigen::Vector3d tmp;
+        tmp = (flag == DEGREE) ? rpy * TO_RADIAN : rpy;
+
+        Eigen::Quaterniond qz(cos(0.5 * tmp.z()), 0, 0, sin(0.5 * tmp.z()));
+        Eigen::Quaterniond qy(cos(0.5 * tmp.y()), 0, sin(0.5 * tmp.y()), 0);
+        Eigen::Quaterniond qx(cos(0.5 * tmp.x()), sin(0.5 * tmp.x()), 0, 0);
+        Eigen::Quaterniond res = qz * qy * qx;
+
+        // res = Euler2Mat(rpy, flag);
+
+        return res;
+    }
 
     inline Eigen::Quaterniond Mat2Quat(const Eigen::Matrix3d &mat) { return Eigen::Quaterniond(mat); }
 
-    
+    /**
+     * @函数功能:  欧拉角  转为 轴角
+     * @参数:
+     * @param {Vector3d} euler 欧拉角 rx ry rz， 默认顺序zyx
+     * @param {AngType} flag 角度类型。 输出类型与输入一致
+     * @返回值:
+     * @版本: V1.0
+     * @作者: AHY
+     * @日期:
+     */
+    inline Eigen::Vector3d Euler2AxisAngle(Eigen::Vector3d euler, AngType flag = DEGREE)
+    {
+        Eigen::Quaterniond q = Euler2Quat(euler, flag);
+        Eigen::Vector3d axis = Quat2AxisAngle(q);
+
+        return ((flag == RADIAN) ? axis * TO_RADIAN : axis);
+    }
 
     inline void printQuaternion(const Eigen::Quaterniond &q, const std::string &info)
     {
@@ -845,7 +872,7 @@ namespace tf3d
     {
         // std::cout << "quaternion: " << q[0] << ", " << q[1] << ", " << q[2] << ", " << q[3] << std::endl;  // x,y,z,w
         std::cout << info << "  axis: " << x.axis().transpose() << "  "
-                  << " ang:" << (x.angle()) << std::endl; 
+                  << " ang:" << (x.angle()) << std::endl;
     }
 
     inline void printAngleAxisd(const Eigen::Vector3d &x, const std::string &info)
